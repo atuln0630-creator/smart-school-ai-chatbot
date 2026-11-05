@@ -1,0 +1,877 @@
+
+# ==========================================================
+# SMARTSCHOOL MEDICAL AI - HOSPITAL EDITION
+# Complete Google Colab Project
+# Frontend + Backend + Groq API
+# ==========================================================
+
+!pip -q install flask requests
+
+import os
+import time
+import threading
+import requests
+
+from flask import Flask, request, jsonify, send_from_directory
+from google.colab.output import eval_js
+
+# ---------------- CONFIG ----------------
+
+PORT = 8000
+GROQ_API = "https://api.groq.com/openai/v1"
+
+app = Flask(__name__)
+
+# ---------------- HTML FRONTEND ----------------
+
+HTML = r"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>SmartSchool Medical AI | Hospital</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+
+body{
+ font-family:Inter,Arial,sans-serif;
+ background:#f2f6fc;
+ color:#183253;
+ min-height:100vh;
+}
+
+.layout{display:flex;min-height:100vh}
+
+.sidebar{
+ width:245px;
+ background:#10294e;
+ color:white;
+ padding:25px 18px;
+ display:flex;
+ flex-direction:column;
+ flex-shrink:0;
+}
+
+.logo{
+ font-size:20px;
+ font-weight:800;
+ line-height:1.5;
+ margin-bottom:32px;
+}
+
+.logo span{font-size:28px}
+
+.nav{
+ padding:13px;
+ margin-bottom:8px;
+ border-radius:9px;
+ font-size:13px;
+ color:#dce8fa;
+}
+
+.nav.active{background:#ffffff20}
+
+.sidebottom{
+ margin-top:auto;
+ padding-top:20px;
+ border-top:1px solid #ffffff35;
+ font-size:11px;
+ line-height:2;
+ color:#c9d9ed;
+}
+
+.main{flex:1;min-width:0}
+
+.topbar{
+ height:68px;
+ background:white;
+ border-bottom:1px solid #e6edf6;
+ display:flex;
+ align-items:center;
+ justify-content:space-between;
+ padding:0 28px;
+}
+
+.topbar h3{font-size:14px}
+
+.status{
+ font-size:11px;
+ font-weight:700;
+ color:#159568;
+}
+
+.hero{
+ margin:25px 28px;
+ padding:36px;
+ min-height:205px;
+ border-radius:18px;
+ color:white;
+ background:
+ linear-gradient(100deg,rgba(10,37,76,.96),rgba(21,100,195,.70)),
+ url("https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1500") center/cover;
+}
+
+.tag{
+ display:inline-block;
+ background:#ffffff25;
+ padding:8px 13px;
+ border-radius:20px;
+ font-size:10px;
+ letter-spacing:1px;
+ margin-bottom:17px;
+}
+
+.hero h1{font-size:29px;margin-bottom:12px}
+.hero p{font-size:13px;line-height:1.9;max-width:650px}
+
+.content{padding:0 28px}
+
+.cards{
+ display:grid;
+ grid-template-columns:repeat(3,1fr);
+ gap:15px;
+ margin-bottom:22px;
+}
+
+.card{
+ background:white;
+ border:1px solid #e4ebf5;
+ padding:21px;
+ border-radius:14px;
+}
+
+.card .icon{font-size:25px;margin-bottom:12px}
+.card h4{font-size:13px;margin-bottom:7px}
+.card p{font-size:11px;color:#7b8ba2;line-height:1.7}
+
+.chat{
+ background:white;
+ border:1px solid #e4ebf5;
+ border-radius:16px;
+ overflow:hidden;
+}
+
+.chathead{
+ padding:19px 21px;
+ border-bottom:1px solid #e7edf6;
+ display:flex;
+ justify-content:space-between;
+ align-items:center;
+}
+
+.chathead h3{font-size:14px}
+.chathead p{font-size:11px;color:#8493a8;margin-top:5px}
+
+.messages{
+ height:390px;
+ overflow-y:auto;
+ padding:22px;
+ background:#fbfdff;
+}
+
+.msg{
+ display:flex;
+ gap:10px;
+ margin-bottom:19px;
+}
+
+.msg.user{justify-content:flex-end}
+
+.avatar{
+ width:35px;
+ height:35px;
+ flex-shrink:0;
+ border-radius:11px;
+ background:#e9f0ff;
+ display:grid;
+ place-items:center;
+}
+
+.bubble{
+ max-width:85%;
+ padding:14px 16px;
+ background:#edf4ff;
+ border-radius:4px 14px 14px 14px;
+ font-size:13px;
+ line-height:1.8;
+ white-space:pre-wrap;
+ overflow-wrap:anywhere;
+}
+
+.user .bubble{
+ background:#1769e0;
+ color:white;
+ border-radius:14px 4px 14px 14px;
+}
+
+.bubble.error{
+ background:#fff0f0;
+ color:#b42318;
+}
+
+.controls{
+ padding:20px;
+ border-top:1px solid #e7edf6;
+}
+
+.settings{
+ display:grid;
+ grid-template-columns:1fr 1fr;
+ gap:14px;
+}
+
+label{
+ display:block;
+ font-size:10px;
+ font-weight:800;
+ margin-bottom:9px;
+}
+
+input,select{
+ width:100%;
+ height:45px;
+ padding:0 13px;
+ border:1px solid #dce5f0;
+ border-radius:9px;
+ background:white;
+ font-size:12px;
+ outline:none;
+ color:#173052;
+}
+
+input:focus,select:focus{border-color:#1769e0}
+
+.quick{
+ display:flex;
+ gap:8px;
+ flex-wrap:wrap;
+ margin:17px 0;
+}
+
+.quick button{
+ background:white;
+ border:1px solid #dce5f0;
+ color:#315783;
+ border-radius:20px;
+ padding:9px 13px;
+ font-size:11px;
+ cursor:pointer;
+}
+
+.inputrow{
+ display:flex;
+ gap:10px;
+}
+
+.inputrow input{flex:1;min-width:0}
+
+button{cursor:pointer}
+
+.send{
+ border:0;
+ background:#1769e0;
+ color:white;
+ border-radius:9px;
+ padding:0 23px;
+ font-weight:700;
+}
+
+.send:disabled{opacity:.5;cursor:not-allowed}
+
+.newchat{
+ background:#ffffff17;
+ border:1px solid #ffffff40;
+ color:white;
+ padding:12px;
+ border-radius:9px;
+ margin-bottom:23px;
+}
+
+.hint{
+ margin-top:11px;
+ font-size:10px;
+ color:#7d8fa7;
+ line-height:1.7;
+}
+
+.footer{
+ text-align:center;
+ padding:21px;
+ color:#8595aa;
+ font-size:10px;
+}
+
+@media(max-width:850px){
+ .sidebar{display:none}
+ .hero{margin:14px;padding:25px}
+ .hero h1{font-size:22px}
+ .content{padding:0 13px}
+ .topbar{padding:0 14px}
+ .cards{grid-template-columns:1fr}
+ .settings{grid-template-columns:1fr}
+ .messages{height:350px}
+ .controls{padding:14px}
+ .inputrow{gap:7px}
+ .send{padding:0 15px}
+}
+</style>
+</head>
+
+<body>
+
+<div class="layout">
+
+<aside class="sidebar">
+
+ <div class="logo">
+  <span>🏥</span><br>
+  SmartSchool<br>Medical AI
+ </div>
+
+ <button class="newchat" onclick="newChat()">＋ New Conversation</button>
+
+ <div class="nav active">🏥 Medical Assistant</div>
+ <div class="nav">🩺 Health Education</div>
+ <div class="nav">💊 Medicine Safety</div>
+ <div class="nav">🌱 Prevention Tips</div>
+ <div class="nav">🔒 Privacy & Safety</div>
+
+ <div class="sidebottom">
+  <b>SmartSchool Medical AI</b><br>
+  Hospital Edition<br>
+  Educational Health Assistant<br>
+  Powered by Groq AI
+ </div>
+
+</aside>
+
+<main class="main">
+
+<header class="topbar">
+ <h3>🏥 Medical AI Dashboard</h3>
+ <span class="status" id="status">● BACKEND ONLINE</span>
+</header>
+
+<section class="hero">
+
+ <span class="tag">✦ YOUR DIGITAL HEALTH COMPANION</span>
+
+ <h1>Welcome to SmartSchool Medical AI</h1>
+
+ <p>
+ Your intelligent educational health assistant.
+ Learn about general health, wellness, common symptoms,
+ hygiene and prevention in Hindi or English.
+ </p>
+
+</section>
+
+<section class="content">
+
+<div class="cards">
+
+ <div class="card">
+  <div class="icon">🩺</div>
+  <h4>Health Education</h4>
+  <p>Learn about health, hygiene and wellness.</p>
+ </div>
+
+ <div class="card">
+  <div class="icon">🌱</div>
+  <h4>Prevention Tips</h4>
+  <p>Understand healthy habits and prevention.</p>
+ </div>
+
+ <div class="card">
+  <div class="icon">🏥</div>
+  <h4>Doctor Guidance</h4>
+  <p>Know when to consult a healthcare professional.</p>
+ </div>
+
+</div>
+
+<div class="chat">
+
+ <div class="chathead">
+  <div>
+   <h3>Smart Medical Assistant</h3>
+   <p>Your educational health companion</p>
+  </div>
+  <span style="font-size:27px">🤖</span>
+ </div>
+
+ <div class="messages" id="messages">
+
+  <div class="msg">
+   <div class="avatar">🤖</div>
+   <div class="bubble">Hello! Welcome to SmartSchool Medical AI.
+
+I can help you learn about general health, nutrition, hygiene and prevention.
+
+नमस्ते! आप हिंदी या English में सवाल पूछ सकते हैं।
+
+How can I help you today?</div>
+  </div>
+
+ </div>
+
+ <div class="controls">
+
+  <div class="settings">
+
+   <div>
+    <label>🔑 GROQ API KEY</label>
+    <input id="apiKey" type="password"
+     placeholder="Enter your Groq API key"
+     autocomplete="off">
+   </div>
+
+   <div>
+    <label>🤖 SELECT AI MODEL</label>
+
+    <select id="model">
+     <option value="openai/gpt-oss-20b">
+      GPT Model - GPT OSS 20B
+     </option>
+
+     <option value="llama-3.3-70b-versatile">
+      Llama Model - Llama 3.3 70B
+     </option>
+    </select>
+   </div>
+
+  </div>
+
+  <div class="quick">
+
+   <button onclick="quickAsk('How can I maintain good hygiene?')">
+    Personal Hygiene
+   </button>
+
+   <button onclick="quickAsk('Explain healthy eating habits.')">
+    Healthy Food
+   </button>
+
+   <button onclick="quickAsk('How can I prevent seasonal illnesses?')">
+    Prevention
+   </button>
+
+   <button onclick="quickAsk('Why is clean drinking water important?')">
+    Safe Water
+   </button>
+
+  </div>
+
+  <div class="inputrow">
+
+   <input id="question"
+    maxlength="3000"
+    placeholder="Ask your health question..."
+    onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendMessage()}">
+
+   <button class="send" id="sendBtn" onclick="sendMessage()">
+    Send ➤
+   </button>
+
+  </div>
+
+  <p class="hint">
+   🔒 Your API key is sent to the Colab backend for your request
+   and is not saved by this application. Do not share your key.
+  </p>
+
+ </div>
+</div>
+
+</section>
+
+<div class="footer">
+ SmartSchool Medical AI © 2026 |
+ Educational use only. Not a substitute for professional medical advice.
+</div>
+
+</main>
+</div>
+
+<script>
+
+const $ = id => document.getElementById(id);
+
+let history = [];
+let busy = false;
+
+function addMessage(text,user=false,error=false){
+
+ const row=document.createElement("div");
+ row.className="msg"+(user?" user":"");
+
+ const avatar=document.createElement("div");
+ avatar.className="avatar";
+ avatar.textContent=user?"👤":"🤖";
+
+ const bubble=document.createElement("div");
+ bubble.className="bubble"+(error?" error":"");
+ bubble.textContent=text;
+
+ row.append(avatar,bubble);
+
+ $("messages").appendChild(row);
+ $("messages").scrollTop=$("messages").scrollHeight;
+
+ return bubble;
+}
+
+function newChat(){
+
+ if(busy)return;
+
+ history=[];
+
+ $("messages").innerHTML="";
+
+ addMessage(
+  "Welcome to SmartSchool Medical AI!\n\n" +
+  "Ask me about general health, hygiene and prevention.\n\n" +
+  "नमस्ते! अपना सवाल पूछिए।"
+ );
+}
+
+async function sendRequest(path,data){
+
+ const response=await fetch(path,{
+  method:"POST",
+  headers:{"Content-Type":"application/json"},
+  body:JSON.stringify(data)
+ });
+
+ const raw=await response.text();
+
+ let result;
+
+ try{
+  result=JSON.parse(raw);
+ }catch(e){
+  throw new Error(
+   "Server returned an invalid response. Please restart Colab."
+  );
+ }
+
+ if(!response.ok){
+  throw new Error(result.error || "Request failed: "+response.status);
+ }
+
+ return result;
+}
+
+async function sendMessage(){
+
+ if(busy)return;
+
+ const question=$("question").value.trim();
+ const key=$("apiKey").value.trim();
+ const model=$("model").value;
+
+ if(!question)return;
+
+ if(!key){
+  alert("Please enter your Groq API Key.");
+  $("apiKey").focus();
+  return;
+ }
+
+ if(!model){
+  alert("Please select a model.");
+  return;
+ }
+
+ addMessage(question,true);
+
+ $("question").value="";
+
+ history.push({
+  role:"user",
+  content:question
+ });
+
+ history=history.slice(-12);
+
+ busy=true;
+ $("sendBtn").disabled=true;
+ $("sendBtn").textContent="Thinking...";
+ $("status").textContent="● AI PROCESSING";
+
+ const loading=addMessage("Thinking...");
+
+ try{
+
+  const data=await sendRequest("/api/chat",{
+   api_key:key,
+   model:model,
+   messages:history
+  });
+
+  loading.textContent=data.reply;
+
+  history.push({
+   role:"assistant",
+   content:data.reply
+  });
+
+  $("status").textContent="● AI ONLINE";
+
+ }catch(error){
+
+  loading.textContent="Error: "+error.message;
+  loading.classList.add("error");
+
+  history.pop();
+
+  $("status").textContent="● REQUEST ERROR";
+
+ }finally{
+
+  busy=false;
+  $("sendBtn").disabled=false;
+  $("sendBtn").textContent="Send ➤";
+
+  $("messages").scrollTop=$("messages").scrollHeight;
+ }
+}
+
+function quickAsk(text){
+
+ if(busy)return;
+
+ $("question").value=text;
+ sendMessage();
+}
+
+</script>
+
+</body>
+</html>
+"""
+
+with open("index.html", "w", encoding="utf-8") as f:
+    f.write(HTML)
+
+# ---------------- BACKEND ----------------
+
+SYSTEM_PROMPT = """
+You are SmartSchool Medical AI, an educational health assistant.
+
+Your purpose is to teach students about general health,
+hygiene, nutrition, wellness and disease prevention.
+
+IMPORTANT RULES:
+
+1. Reply in the language used by the student.
+2. Use simple, clear and student-friendly language.
+3. Explain general health concepts and prevention.
+4. Never claim to diagnose a disease.
+5. Never prescribe medicines or medication doses.
+6. Do not recommend self-medication.
+7. Encourage students to speak with a parent,
+   guardian, school nurse or qualified doctor.
+8. If symptoms seem serious, advise immediate help
+   from a trusted adult and qualified medical services.
+9. For an emergency in India, advise calling 112.
+10. Never request passwords, private details or unnecessary
+    personal medical information.
+11. Do not replace professional medical care.
+"""
+
+@app.route("/")
+def home():
+    return send_from_directory(".", "index.html")
+
+
+@app.route("/api/chat", methods=["POST"])
+def chat():
+
+    data = request.get_json(silent=True) or {}
+
+    key = data.get("api_key")
+    model = data.get("model")
+    messages = data.get("messages")
+
+    # API KEY VALIDATION
+    if not isinstance(key, str) or not key.strip():
+        return jsonify({"error": "Please enter your Groq API key."}), 400
+
+    key = key.strip()
+
+    if len(key) > 300:
+        return jsonify({"error": "Invalid API key format."}), 400
+
+    # MODEL VALIDATION
+    allowed_models = {
+        "openai/gpt-oss-20b",
+        "llama-3.3-70b-versatile"
+    }
+
+    if model not in allowed_models:
+        return jsonify({"error": "Invalid model selection."}), 400
+
+    # MESSAGE VALIDATION
+    if not isinstance(messages, list) or not messages:
+        return jsonify({"error": "Please enter a question."}), 400
+
+    if len(messages) > 12:
+        return jsonify({"error": "Conversation is too long. Start a new chat."}), 400
+
+    safe_messages = [
+        {"role": "system", "content": SYSTEM_PROMPT}
+    ]
+
+    for msg in messages:
+
+        if not isinstance(msg, dict):
+            continue
+
+        role = msg.get("role")
+        content = msg.get("content")
+
+        if role not in ["user", "assistant"]:
+            continue
+
+        if not isinstance(content, str) or not content.strip():
+            continue
+
+        if len(content) > 3000:
+            return jsonify({"error": "Message is too long."}), 400
+
+        safe_messages.append({
+            "role": role,
+            "content": content
+        })
+
+    if not any(m["role"] == "user" for m in safe_messages):
+        return jsonify({"error": "No valid question found."}), 400
+
+    # GROQ API REQUEST
+    try:
+
+        response = requests.post(
+            GROQ_API + "/chat/completions",
+            headers={
+                "Authorization": "Bearer " + key,
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": model,
+                "messages": safe_messages,
+                "max_completion_tokens": 1200
+            },
+            timeout=90
+        )
+
+        if not response.ok:
+
+            try:
+                error_data = response.json()
+                message = error_data.get("error", {}).get(
+                    "message", "Groq API error"
+                )
+            except Exception:
+                message = "Groq API returned an unexpected response."
+
+            if response.status_code == 401:
+                message = "Invalid API key. Please check your Groq API key."
+
+            elif response.status_code == 403:
+                message = "Access denied. Check your model access."
+
+            elif response.status_code == 429:
+                message = "Rate limit reached. Please wait and try again."
+
+            elif response.status_code == 404:
+                message = "Selected model is unavailable. Try another model."
+
+            return jsonify({"error": str(message)[:400]}), response.status_code
+
+        result = response.json()
+
+        reply = result["choices"][0]["message"]["content"]
+
+        if not isinstance(reply, str) or not reply.strip():
+            return jsonify({"error": "Empty response received."}), 502
+
+        return jsonify({
+            "success": True,
+            "reply": reply
+        })
+
+    except requests.Timeout:
+        return jsonify({"error": "Request timed out. Please try again."}), 504
+
+    except requests.RequestException:
+        return jsonify({"error": "Unable to connect to Groq API."}), 502
+
+    except Exception:
+        return jsonify({"error": "Unexpected backend error."}), 500
+
+
+# ---------------- START SERVER ----------------
+
+def run_server():
+    app.run(
+        host="0.0.0.0",
+        port=PORT,
+        debug=False,
+        use_reloader=False,
+        threaded=True
+    )
+
+server_thread = threading.Thread(
+    target=run_server,
+    daemon=True
+)
+
+server_thread.start()
+
+# Wait for backend
+ready = False
+
+for i in range(40):
+    try:
+        r = requests.get(
+            "http://127.0.0.1:8000/",
+            timeout=2
+        )
+
+        if r.status_code == 200:
+            ready = True
+            break
+
+    except requests.RequestException:
+        pass
+
+    time.sleep(0.5)
+
+if not ready:
+    raise RuntimeError("Backend did not start. Restart Colab.")
+
+# ---------------- WEBSITE URL ----------------
+
+WEBSITE_URL = eval_js(
+    "google.colab.kernel.proxyPort(8000)"
+)
+
+print("\n" + "=" * 55)
+print("SMARTSCHOOL MEDICAL AI")
+print("HOSPITAL EDITION")
+print("=" * 55)
+
+print("Backend: ONLINE")
+print("Frontend: READY")
+
+print("\nYOUR WEBSITE URL:")
+print(WEBSITE_URL)
+
+print("=" * 55)
